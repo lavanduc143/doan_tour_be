@@ -5,8 +5,15 @@ import jwt from "jsonwebtoken";
 // user register
 export const register = async (req, res) => {
   try {
-    //hashing password
-    console.log("Role nhận được:", req.body.role);
+    // Kiểm tra xem email đã tồn tại chưa
+    const existingUser = await User.findOne({ email: req.body.email });
+    if (existingUser) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Email đã tồn tại!" });
+    }
+
+    // Hashing password
     const salt = bcrypt.genSaltSync(10);
     const hash = bcrypt.hashSync(req.body.password, salt);
 
@@ -36,12 +43,10 @@ export const login = async (req, res) => {
 
     // if user doesn't exist
     if (!user) {
-      return res
-        .status(404)
-        .json({
-          success: false,
-          message: "Không tìm thấy thông tin tài khoản!",
-        });
+      return res.status(404).json({
+        success: false,
+        message: "Không tìm thấy thông tin tài khoản!",
+      });
     }
 
     // if user is exist then check the passord or compare the password

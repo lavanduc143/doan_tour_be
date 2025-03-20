@@ -1,39 +1,24 @@
 import Booking from "./../models/Booking.js";
 import Tour from "./../models/Tour.js";
 
-// create new booking
-// export const createBooking = async (req, res) => {
-//   const newBooking = new Booking(req.body);
-
-//   try {
-//     const savedBooking = await newBooking.save();
-
-//     res
-//       .status(200)
-//       .json({
-//         success: true,
-//         message: "Your tour is booked!",
-//         data: savedBooking,
-//       });
-//   } catch (error) {
-//     res.status(500).json({ success: true, message: "Internal server error!" });
-//   }
-// };
-
 //create new booking update
 export const createBooking = async (req, res) => {
-  const newBooking = new Booking(req.body);
-  //   console.log("Request body:", req.body);
+  const { tourId, guestSize } = req.body;
+
+  const newBooking = new Booking({
+    ...req.body,
+    status: "Pending", // Gán trạng thái mặc định là Pending khi tạo booking mới
+  });
+
   try {
     const savedBooking = await newBooking.save();
 
     // Cập nhật số lượng booking và chỗ còn trống của tour
-    const tourId = req.body.tourId;
     const tour = await Tour.findById(tourId);
 
     if (tour) {
       tour.currentBookings += 1; // Tăng số lượng booking hiện tại
-      tour.availableSlots -= 1; // Giảm số chỗ còn trống
+      tour.availableSlots -= guestSize; // Giảm số chỗ còn trống dựa trên số lượng khách đặt
       await tour.save();
     }
 
@@ -43,7 +28,6 @@ export const createBooking = async (req, res) => {
       data: savedBooking,
     });
   } catch (error) {
-    //  console.error("🚨 Internal Server Error:", error);
     res.status(500).json({ success: false, message: "Internal server error!" });
   }
 };
@@ -74,6 +58,46 @@ export const getAllBooking = async (req, res) => {
   }
 };
 
+export const updateBookingStatus = async (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body; // Nhận trạng thái từ request (Approved / Rejected)
+
+  if (!["Approved", "Rejected"].includes(status)) {
+    return res.status(400).json({ success: false, message: "Invalid status" });
+  }
+
+  try {
+    const booking = await Booking.findById(id);
+    if (!booking) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Booking not found" });
+    }
+
+    // Nếu booking bị từ chối, cập nhật lại số chỗ trong tour
+    if (status === "Rejected") {
+      const { tourId, guestSize } = booking;
+      const tour = await Tour.findById(tourId);
+
+      if (tour) {
+        tour.availableSlots += guestSize; // Cộng lại số chỗ đã bị giữ trước đó
+        await tour.save();
+      }
+    }
+
+    booking.status = status; // Cập nhật trạng thái
+    await booking.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Booking status updated",
+      data: booking,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Internal server error!" });
+  }
+};
+
 export const cancelBooking = async (req, res) => {
   const bookingId = req.params.id;
 
@@ -85,12 +109,12 @@ export const cancelBooking = async (req, res) => {
         .json({ success: false, message: "Booking not found" });
     }
 
-    const tourId = booking.tourId;
+    const { tourId, guestSize } = booking; // Lấy tourId và groupSize từ booking
     const tour = await Tour.findById(tourId);
 
     if (tour) {
       tour.currentBookings -= 1; // Giảm số lượng booking hiện tại
-      tour.availableSlots += 1; // Tăng số chỗ còn trống
+      tour.availableSlots += guestSize; // Cộng lại đúng số chỗ bị trừ
       await tour.save();
     }
 
